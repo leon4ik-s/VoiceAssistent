@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Голосовой ассистент</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --text: #1d2330; --muted: #6b7280; --line: #e3e6eb;
+    --accent: #2563eb; --accent-soft: #e8efff; --danger: #dc2626; --danger-soft: #fdecec;
+    --ok: #15803d; --warn-soft: #fff6db;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+           padding: 12px 20px; background: var(--card); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 18px; margin: 0; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  select, input, button { font: inherit; }
+  select, input[type=text], input[type=date] { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px;
+           background: #fff; color: var(--text); min-width: 0; }
+  button { padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.small { padding: 2px 8px; font-size: 13px; }
+  input[type=date] { flex: 1 1 120px; min-width: 0; }
+  .card { min-width: 0; }
+  #banner { display: none; padding: 10px 20px; background: var(--danger-soft); color: var(--danger); border-bottom: 1px solid #f6caca; }
+  #info-banner { display: none; padding: 8px 20px; background: var(--accent-soft); color: var(--accent); border-bottom: 1px solid #cfdcff; font-size: 14px; }
+  #due-banner { display: none; padding: 10px 20px; background: var(--warn-soft); border-bottom: 1px solid #f1df9c; }
+  body { display: flex; flex-direction: column; height: 100vh; }
+  main { flex: 1; min-height: 0; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px;
+         padding: 16px 20px; max-width: 1280px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .card h2 { font-size: 15px; margin: 0 0 10px; }
+  #chat { display: flex; flex-direction: column; min-height: 0; }
+  #messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 2px 10px; }
+  .msg { max-width: 80%; padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; word-wrap: break-word; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+  .msg.assistant { align-self: flex-start; background: #eef0f3; border-bottom-left-radius: 4px; }
+  .msg.error { align-self: stretch; max-width: 100%; background: var(--danger-soft); color: var(--danger); }
+  .msg .play { margin-left: 8px; border: none; background: transparent; padding: 0 2px; cursor: pointer; opacity: .65; }
+  .msg .play:hover { opacity: 1; }
+  .hint { color: var(--muted); font-size: 13px; }
+  #composer { display: flex; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+  #composer input { flex: 1; }
+  #mic { width: 44px; font-size: 18px; padding: 6px 0; }
+  #mic.rec { background: var(--danger); border-color: var(--danger); color: #fff; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .6; } }
+  aside { display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow-y: auto; }
+  .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; }
+  .list li { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; display: flex; gap: 8px; align-items: flex-start; }
+  .list li.due { background: var(--warn-soft); border-color: #eccf6c; }
+  .list li.done .t { text-decoration: line-through; color: var(--muted); }
+  .list .when { color: var(--muted); font-size: 12px; white-space: nowrap; min-width: 74px; flex-shrink: 0; padding-top: 2px; }
+  .list .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .list li > button { flex-shrink: 0; }
+  .badge { font-size: 11px; padding: 1px 6px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); margin-left: 4px; white-space: nowrap; }
+  .badge.meeting { background: #efe7ff; color: #6d28d9; }
+  .badge.reminder { background: #fff1d6; color: #b45309; }
+  .badge.hist { background: #eef0f3; color: var(--muted); }
+  .day { font-weight: 600; font-size: 13px; margin-top: 6px; color: var(--muted); }
+  .muted { color: var(--muted); }
+  #modal { width: min(400px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--line); border-radius: 12px;
+           background: var(--card); color: var(--text); box-shadow: 0 12px 40px rgba(29, 35, 48, .18); }
+  #modal::backdrop { background: rgba(29, 35, 48, .35); }
+  #modal form { display: flex; flex-direction: column; gap: 12px; padding: 18px; }
+  #modal h2 { font-size: 16px; margin: 0; }
+  #modal p { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+  #modal input { width: 100%; }
+  #modal .actions { display: flex; justify-content: flex-end; gap: 8px; }
+  @media (max-width: 900px) {
+    body { display: block; height: auto; }
+    main { grid-template-columns: minmax(0, 1fr); padding: 12px; }
+    #chat { height: 70vh; }
+    aside { overflow: visible; }
+    .msg { max-width: 92%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Голосовой ассистент</h1>
+  <div class="row">
+    <label for="user" class="muted">Пользователь</label>
+    <select id="user"></select>
+    <button id="add-user" title="Добавить пользователя">+</button>
+    <label for="stt" class="muted">Речь</label>
+    <select id="stt" title="Где распознавать голос">
+      <option value="server">сервер</option><option value="browser">браузер</option>
+    </select>
+    <label for="tts" class="muted">Озвучка</label>
+    <select id="tts" title="Как озвучивать ответы">
+      <option value="browser">браузер</option><option value="server">сервер</option><option value="off">выкл</option>
+    </select>
+  </div>
+</header>
+<div id="banner"></div>
+<div id="info-banner"></div>
+<div id="due-banner"></div>
+
+<main>
+  <section class="card" id="chat">
+    <div id="messages"></div>
+    <div class="hint" id="state"></div>
+    <form id="composer" autocomplete="off">
+      <button type="button" id="mic" title="Нажмите, чтобы говорить; нажмите еще раз, чтобы отправить">🎤</button>
+      <input type="text" id="text" placeholder="Например: напомни завтра в 9 позвонить Ивану">
+      <button type="submit" class="primary">Отправить</button>
+    </form>
+  </section>
+
+  <aside>
+    <section class="card">
+      <h2>Ближайшие 24 часа</h2>
+      <ul class="list" id="upcoming"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Расписание</h2>
+      <div class="row" style="margin-bottom:8px">
+        <input type="date" id="from"> <span class="muted">-</span> <input type="date" id="to">
+      </div>
+      <div class="row" style="margin-bottom:10px">
+        <select id="kind">
+          <option value="">Все</option><option value="task">Задачи</option>
+          <option value="reminder">Напоминания</option><option value="meeting">Встречи</option>
+        </select>
+        <button id="show">Показать</button>
+      </div>
+      <ul class="list" id="schedule"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Календарь и история</h2>
+      <div class="row">
+        <a id="export" href="#"><button type="button">Скачать .ics</button></a>
+        <label><button type="button" onclick="document.getElementById('ics').click()">Загрузить .ics</button></label>
+        <input type="file" id="ics" accept=".ics,text/calendar" hidden>
+        <button type="button" id="import-history" title="Загрузить историю прошлых запросов из CSV для выбранного пользователя">История из CSV</button>
+      </div>
+      <p class="hint" id="cal-state"></p>
+    </section>
+  </aside>
+</main>
+
+<dialog id="modal" aria-labelledby="modal-title">
+  <form method="dialog">
+    <h2 id="modal-title"></h2>
+    <p id="modal-text"></p>
+    <input type="text" id="modal-input" maxlength="60" autocomplete="off" placeholder="Имя" aria-label="Имя">
+    <div class="actions">
+      <button type="button" id="modal-cancel">Отмена</button>
+      <button type="submit" id="modal-ok" value="ok"></button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const KIND = { task: "задача", reminder: "напоминание", meeting: "встреча" };
+const WD = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+let userId = null, seenDue = new Set(), currentAudio = null;
+
+function setState(t) { $("state").textContent = t || ""; }
+function banner(t) { $("banner").style.display = t ? "block" : "none"; $("banner").textContent = t || ""; }
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  const ct = r.headers.get("content-type") || "";
+  const body = ct.includes("json") ? await r.json() : await r.blob();
+  if (!r.ok) {
+    const err = new Error((body && (body.error || body.detail)) || ("Ошибка " + r.status));
+    err.body = body; throw err;
+  }
+  return body;
+}
+
+function addMsg(role, text, audioB64) {
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+  div.textContent = text;
+  if (role === "assistant") {
+    const b = document.createElement("button");
+    b.className = "play"; b.title = "Прослушать"; b.textContent = "🔊";
+    b.onclick = () => playText(text, div);
+    div.appendChild(b);
+    if (audioB64) div.dataset.audio = audioB64;
+  }
+  $("messages").appendChild(div);
+  $("messages").scrollTop = $("messages").scrollHeight;
+  return div;
+}
+
+// ---------- озвучка: браузер (speechSynthesis) или сервер ----------
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let ruVoice = null;
+function pickVoice() {
+  if (!window.speechSynthesis) return;
+  const voices = speechSynthesis.getVoices();
+  ruVoice = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith("ru") && /google|milena|yuri|katya|irina|pavel/i.test(v.name))
+         || voices.find((v) => v.lang && v.lang.toLowerCase().startsWith("ru")) || null;
+}
+if (window.speechSynthesis) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+
+function speakBrowser(text) {
+  if (!window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "ru-RU"; if (ruVoice) u.voice = ruVoice;
+  speechSynthesis.speak(u);
+}
+
+function playB64(b64) {
+  if (currentAudio) currentAudio.pause();
+  currentAudio = new Audio("data:audio/mpeg;base64," + b64);
+  currentAudio.play().catch(() => {});
+}
+
+async function playText(text, div) {
+  if ($("tts").value !== "server") return speakBrowser(text);
+  if (div.dataset.audio) return playB64(div.dataset.audio);
+  try {
+    setState("Готовлю озвучку...");
+    const blob = await api("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ text }) });
+    const b64 = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result.split(",")[1]); fr.readAsDataURL(blob); });
+    div.dataset.audio = b64; playB64(b64);
+  } catch (e) { speakBrowser(text); } finally { setState(""); }
+}
+
+function handleReply(res) {
+  addMsg("assistant", res.reply, res.audio);
+  const mode = $("tts").value;
+  if (mode === "server" && res.audio) playB64(res.audio);
+  else if (mode !== "off") speakBrowser(res.reply);  // браузер или запасной вариант, если сервер не смог
+  if (res.changed) { loadSchedule(); loadUpcoming(); }
+}
+
+async function sendText(text, shownAs) {
+  if (!text.trim() || !userId) return;
+  addMsg("user", shownAs || text);
+  setState("Думаю...");
+  try {
+    const res = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, text, speak: $("tts").value === "server" }) });
+    setState(""); handleReply(res);
+  } catch (e) { setState(""); addMsg("error", e.message); refreshStatus(); }
+}
+
+$("composer").onsubmit = (ev) => { ev.preventDefault(); const t = $("text").value; $("text").value = ""; sendText(t); };
+
+// ---------- распознавание: сервер (faster-whisper / OpenAI) или браузер (Web Speech API) ----------
+let browserRec = null;
+let wavRec = null;
+let sttMaxSeconds = 29;
+
+function switchToBrowserStt(reason) {
+  if (!SpeechRec) { addMsg("error", reason + " Распознавание в браузере тоже недоступно: откройте страницу в Chrome или пишите текстом."); return false; }
+  $("stt").value = "browser"; saveSetting("va_stt", "browser");
+  addMsg("error", reason + " Переключаюсь на распознавание в браузере - нажмите микрофон еще раз.");
+  return true;
+}
+
+function startBrowserStt() {
+  if (browserRec) { browserRec.stop(); return; }
+  if (!SpeechRec) { addMsg("error", "Этот браузер не умеет распознавать речь. Откройте страницу в Chrome или выберите «сервер»."); return; }
+  browserRec = new SpeechRec();
+  browserRec.lang = "ru-RU"; browserRec.interimResults = false; browserRec.maxAlternatives = 1;
+  let said = "";
+  browserRec.onresult = (e) => { said = Array.from(e.results).map((r) => r[0].transcript).join(" ").trim(); };
+  browserRec.onerror = (e) => { if (e.error !== "no-speech" && e.error !== "aborted") addMsg("error", "Ошибка распознавания в браузере: " + e.error); };
+  browserRec.onend = () => {
+    browserRec = null; $("mic").classList.remove("rec"); setState("");
+    if (said) sendText(said, "🎤 " + said); else setState("Речь не распознана");
+  };
+  browserRec.start();
+  $("mic").classList.add("rec");
+  setState("Говорите... распознавание остановится после паузы");
+}
+
+// Запись сразу в WAV (16 кГц, моно, 16 бит): такой формат принимают SpeechKit, faster-whisper и OpenAI,
+// поэтому на сервере не нужен ffmpeg.
+function encodeWav(chunks, inRate, outRate) {
+  const total = chunks.reduce((a, c) => a + c.length, 0);
+  const data = new Float32Array(total);
+  let off = 0;
+  for (const c of chunks) { data.set(c, off); off += c.length; }
+  const ratio = inRate / outRate;
+  const outLen = Math.floor(total / ratio);
+  const pcm = new Int16Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const from = Math.floor(i * ratio), to = Math.min(total, Math.floor((i + 1) * ratio));
+    let sum = 0, n = 0;
+    for (let j = from; j < to; j++) { sum += data[j]; n++; }
+    const v = Math.max(-1, Math.min(1, n ? sum / n : 0));
+    pcm[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+  }
+  const buf = new ArrayBuffer(44 + pcm.length * 2), dv = new DataView(buf);
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) dv.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, "RIFF"); dv.setUint32(4, 36 + pcm.length * 2, true); str(8, "WAVE"); str(12, "fmt ");
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, outRate, true); dv.setUint32(28, outRate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+  str(36, "data"); dv.setUint32(40, pcm.length * 2, true);
+  new Int16Array(buf, 44).set(pcm);
+  return { blob: new Blob([buf], { type: "audio/wav" }), seconds: outLen / outRate };
+}
+
+async function sendWav(blob) {
+  const fd = new FormData();
+  fd.append("user_id", userId);
+  fd.append("speak_reply", $("tts").value === "server");
+  fd.append("audio", blob, "speech.wav");
+  setState("Распознаю речь...");
+  try {
+    const res = await api("/api/voice", { method: "POST", body: fd });
+    setState("");
+    if (res.transcript) addMsg("user", "🎤 " + res.transcript);
+    handleReply(res);
+  } catch (e) {
+    setState("");
+    if (e.body && e.body.stt_failed) switchToBrowserStt(e.message);
+    else addMsg("error", e.message);
+  }
+}
+
+function stopWav() {
+  const r = wavRec; if (!r) return;
+  wavRec = null;
+  clearTimeout(r.timer);
+  try { r.src.disconnect(); r.node.disconnect(); } catch (e) {}
+  r.stream.getTracks().forEach((t) => t.stop());
+  r.ctx.close();
+  $("mic").classList.remove("rec");
+  const wav = encodeWav(r.chunks, r.rate, 16000);
+  if (wav.seconds < 0.4) { setState("Слишком короткая запись"); return; }
+  sendWav(wav.blob);
+}
+
+async function startServerStt() {
+  if (wavRec) { stopWav(); return; }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!navigator.mediaDevices || !AC) { switchToBrowserStt("Браузер не может записать звук для сервера."); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+    const ctx = new AC();
+    const src = ctx.createMediaStreamSource(stream);
+    const node = ctx.createScriptProcessor(4096, 1, 1);
+    const chunks = [];
+    node.onaudioprocess = (e) => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    src.connect(node); node.connect(ctx.destination);
+    wavRec = { ctx, src, node, stream, chunks, rate: ctx.sampleRate };
+    wavRec.timer = setTimeout(stopWav, sttMaxSeconds * 1000);
+    $("mic").classList.add("rec");
+    setState(`Говорите... нажмите на микрофон еще раз, чтобы отправить (до ${sttMaxSeconds} с)`);
+  } catch (e) { addMsg("error", "Нет доступа к микрофону: " + e.message); }
+}
+
+$("mic").onclick = () => ($("stt").value === "browser" ? startBrowserStt() : startServerStt());
+
+function saveSetting(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function loadSetting(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+$("stt").onchange = (e) => saveSetting("va_stt", e.target.value);
+$("tts").onchange = (e) => saveSetting("va_tts", e.target.value);
+
+// ---------- диалог вместо confirm и prompt ----------
+// Возвращает true (или введенный текст, если input) при подтверждении, null при отмене.
+function ask({ title, text = "", ok, danger = false, input = false }) {
+  const d = $("modal"), field = $("modal-input"), okBtn = $("modal-ok");
+  $("modal-title").textContent = title;
+  $("modal-text").textContent = text; $("modal-text").hidden = !text;
+  field.hidden = !input; field.value = "";
+  okBtn.textContent = ok; okBtn.className = danger ? "danger" : "primary"; okBtn.disabled = input;
+  field.oninput = () => { okBtn.disabled = !field.value.trim(); };
+  d.returnValue = "";
+  d.showModal();
+  (input ? field : $("modal-cancel")).focus();
+  return new Promise((resolve) => {
+    d.onclose = () => resolve(d.returnValue === "ok" ? (input ? field.value.trim() : true) : null);
+  });
+}
+$("modal-cancel").onclick = () => $("modal").close();
+$("modal").onclick = (e) => { if (e.target === $("modal")) $("modal").close(); };  // клик мимо окна
+
+// ---------- расписание ----------
+function fmtDay(iso) { const d = new Date(iso + "T00:00:00"); return `${WD[d.getDay()]}, ${d.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}`; }
+
+function itemLi(it, opts = {}) {
+  const li = document.createElement("li");
+  if (it.status === "done") li.classList.add("done");
+  if (opts.due) li.classList.add("due");
+  const when = document.createElement("span");
+  when.className = "when";
+  when.textContent = (opts.withDate ? it.date.slice(5).split("-").reverse().join(".") + " " : "") +
+                     (it.time ? it.time + (it.end_time ? "-" + it.end_time : "") : "весь день");
+  const t = document.createElement("span");
+  t.className = "t";
+  t.textContent = it.title;
+  const b = document.createElement("span");
+  b.className = "badge " + it.kind; b.textContent = KIND[it.kind] || it.kind; t.appendChild(b);
+  if (it.recurrence_ru) { const r = document.createElement("span"); r.className = "badge"; r.textContent = it.recurrence_ru; t.appendChild(r); }
+  if (it.source === "import") { const h = document.createElement("span"); h.className = "badge hist"; h.textContent = "история"; t.appendChild(h); }
+  li.append(when, t);
+  if (it.kind !== "meeting") {
+    const done = document.createElement("button");
+    done.className = "small"; done.title = it.status === "done" ? "Вернуть в работу" : "Выполнено";
+    done.textContent = it.status === "done" ? "↺" : "✓";
+    done.onclick = () => act(`/api/items/${it.id}/complete?user_id=${userId}&done=${it.status !== "done"}&occurrence_date=${it.date}`, "POST");
+    li.appendChild(done);
+  }
+  const del = document.createElement("button");
+  del.className = "small"; del.title = it.recurrence ? "Удалить всю серию" : "Удалить"; del.textContent = "✕";
+  del.onclick = async () => {
+    const yes = await ask({ title: it.recurrence ? "Удалить всю серию?" : "Удалить запись?", text: it.title, ok: "Удалить", danger: true });
+    if (yes) act(`/api/items/${it.id}?user_id=${userId}`, "DELETE");
+  };
+  li.appendChild(del);
+  return li;
+}
+
+async function act(url, method) {
+  try { await api(url, { method }); loadSchedule(); loadUpcoming(); } catch (e) { addMsg("error", e.message); }
+}
+
+async function loadSchedule() {
+  if (!userId) return;
+  const q = new URLSearchParams({ user_id: userId, date_from: $("from").value, date_to: $("to").value });
+  if ($("kind").value) q.set("kind", $("kind").value);
+  const ul = $("schedule"); ul.innerHTML = "";
+  try {
+    const items = await api("/api/schedule?" + q);
+    if (!items.length) { ul.innerHTML = '<li class="muted">Записей нет</li>'; return; }
+    let day = null;
+    for (const it of items) {
+      if (it.date !== day) { day = it.date; const h = document.createElement("li"); h.className = "day"; h.style.border = "none"; h.textContent = fmtDay(day); ul.appendChild(h); }
+      ul.appendChild(itemLi(it));
+    }
+  } catch (e) { ul.innerHTML = ""; addMsg("error", e.message); }
+}
+
+function beep() {
+  try { const c = new AudioContext(), o = c.createOscillator(); o.frequency.value = 880; o.connect(c.destination); o.start(); setTimeout(() => { o.stop(); c.close(); }, 250); } catch (e) {}
+}
+
+async function loadUpcoming() {
+  if (!userId) return;
+  try {
+    const res = await api(`/api/upcoming?user_id=${userId}&hours=24`);
+    const ul = $("upcoming"); ul.innerHTML = "";
+    res.due.forEach((it) => ul.appendChild(itemLi(it, { due: true, withDate: true })));
+    res.upcoming.forEach((it) => ul.appendChild(itemLi(it, { withDate: true })));
+    if (!res.due.length && !res.upcoming.length) ul.innerHTML = '<li class="muted">Ничего не запланировано</li>';
+    const fresh = res.due.filter((it) => !seenDue.has(it.id + it.date + it.time));
+    fresh.forEach((it) => seenDue.add(it.id + it.date + it.time));
+    if (res.due.length) {
+      $("due-banner").style.display = "block";
+      $("due-banner").textContent = "⏰ Пора: " + res.due.map((it) => `${it.title} (${it.time})`).join("; ");
+    } else $("due-banner").style.display = "none";
+    if (fresh.length) beep();
+  } catch (e) { /* фоновый опрос: ошибки не показываем */ }
+}
+
+// ---------- пользователи ----------
+async function loadUsers(selectId) {
+  const users = await api("/api/users");
+  const sel = $("user"); sel.innerHTML = "";
+  users.forEach((u) => { const o = document.createElement("option"); o.value = u.id; o.textContent = u.name; sel.appendChild(o); });
+  let saved = null; try { saved = localStorage.getItem("va_user"); } catch (e) {}
+  const want = selectId || saved;
+  if (want && users.some((u) => String(u.id) === String(want))) sel.value = want;
+  await selectUser(sel.value);
+}
+
+async function selectUser(id) {
+  userId = Number(id); seenDue = new Set();
+  try { localStorage.setItem("va_user", id); } catch (e) {}
+  $("export").href = `/api/export.ics?user_id=${userId}`;
+  $("messages").innerHTML = "";
+  const hist = await api(`/api/history?user_id=${userId}&limit=40`);
+  if (!hist.length) addMsg("assistant", "Здравствуйте! Скажите или напишите, что запланировать. Например: «Встреча с Иваном в пятницу в 15:00», «Что у меня на завтра?», «Когда была демо по хакатону?»");
+  hist.forEach((m) => addMsg(m.role, m.content));
+  loadSchedule(); loadUpcoming();
+}
+
+$("user").onchange = (e) => selectUser(e.target.value);
+$("add-user").onclick = async () => {
+  const name = await ask({ title: "Новый пользователь", ok: "Добавить", input: true });
+  if (!name) return;
+  try { const u = await api("/api/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }); loadUsers(u.id); }
+  catch (e) { addMsg("error", e.message); }
+};
+$("show").onclick = loadSchedule;
+
+$("ics").onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const fd = new FormData(); fd.append("user_id", userId); fd.append("file", f);
+  try { const r = await api("/api/import/ics", { method: "POST", body: fd }); $("cal-state").textContent = `Из .ics: добавлено ${r.created}, обновлено ${r.updated}, пропущено ${r.skipped}`; loadSchedule(); loadUpcoming(); }
+  catch (err) { $("cal-state").textContent = err.message; }
+  e.target.value = "";
+};
+$("import-history").onclick = async () => {
+  try { const r = await api("/api/import/history", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: userId }) });
+        $("cal-state").textContent = `История: строк ${r.rows}, добавлено ${r.inserted}, уже были ${r.skipped_existing}`; loadSchedule(); }
+  catch (err) { $("cal-state").textContent = err.message; }
+};
+
+async function refreshStatus() {
+  try {
+    const st = await api("/api/status");
+    banner(st.message);
+    const emb = st.embeddings;
+    const info = $("info-banner");
+    if (emb && emb.running) { info.style.display = "block"; info.textContent = `Готовлю поиск по истории: ${emb.done} из ${emb.total} (считается локально, один раз)`; }
+    else info.style.display = "none";
+    return st;
+  } catch (e) { banner("Сервер недоступен: " + e.message); return null; }
+}
+
+(async function init() {
+  const st = await refreshStatus();
+  if (!st) return;
+  // распознавание: сервер, если он есть; иначе браузер
+  sttMaxSeconds = st.stt_max_seconds || 29;
+  $("stt").querySelector('[value=server]').disabled = !st.stt_server;
+  $("stt").value = loadSetting("va_stt") || (st.stt_server ? "server" : "browser");
+  if (!st.stt_server) $("stt").value = "browser";
+  // озвучка: по умолчанию браузер; сервер - только если настроен
+  $("tts").querySelector('[value=server]').disabled = !st.tts_server;
+  $("tts").value = loadSetting("va_tts") || (st.tts_server ? "server" : "browser");
+  if ($("tts").value === "server" && !st.tts_server) $("tts").value = "browser";
+  const today = st.now.slice(0, 10);
+  $("from").value = today;
+  const d = new Date(today + "T00:00:00"); d.setDate(d.getDate() + 6);
+  $("to").value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  await loadUsers();
+  setInterval(loadUpcoming, 30000);
+  setInterval(refreshStatus, 15000);
+})();
+</script>
+</body>
+</html>

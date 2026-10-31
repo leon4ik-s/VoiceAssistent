@@ -1,0 +1,4 @@
+# Необязательно: локальное распознавание речи на сервере (faster-whisper).
+# Без него голос распознается в браузере (Chrome, Web Speech API).
+-r requirements.txt
+faster-whisper>=1.0
